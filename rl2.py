@@ -1,6 +1,6 @@
 #http://www.roguebasin.com/index.php?title=Complete_Roguelike_Tutorial,_using_python%2Blibtcod
 
-#notepad++: run with "C:\whatever\debug_py.bat" "$(CURRENT_DIRECTORY)" $(FILE_NAME)
+#notepad++: run with "C:\[path]\debug_py.bat" "$(CURRENT_DIRECTORY)" $(FILE_NAME)
 
 import libtcodpy as libtcod
 import math
@@ -63,14 +63,25 @@ LEVEL_UP_BASE = 200
 LEVEL_UP_FACTOR = 150
 
 
-color_dark_wall = libtcod.Color(0, 0, 100)
-color_light_wall = libtcod.Color(130, 110, 50)
-color_dark_ground = libtcod.Color(50, 50, 150)
-color_light_ground = libtcod.Color(200, 180, 50)
+# color_dark_wall = libtcod.Color(0, 0, 100)
+# color_light_wall = libtcod.Color(130, 110, 50)
+# color_dark_ground = libtcod.Color(50, 50, 150)
+# color_light_ground = libtcod.Color(200, 180, 50)
 
-libtcod.console_set_custom_font('arial12x12.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
-libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
+color_light_ground = libtcod.Color(150, 150, 150)
+color_dark_ground = libtcod.Color(75, 75, 75)
+
+libtcod.console_set_custom_font('oryx_tiles_edit.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD, 32, 12)
+libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False, libtcod.RENDERER_SDL)
+libtcod.console_map_ascii_codes_to_font(256, 32, 0, 5)
+libtcod.console_map_ascii_codes_to_font(256+32, 32, 0, 6)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
+
+mage_tile = 256+32 #2nd row, 1st sprite
+skeleton_tile = 256+32+1 #2nd row, 2nd sprite
+
+wall_tile = 256
+ground_tile = 256+1
 
 libtcod.sys_set_fps(LIMIT_FPS)
 
@@ -300,21 +311,6 @@ class Equipment:
 		self.is_equipped = False
 		message('Dequipped ' + self.owner.name + ' from ' + self.slot + '.', libtcod.light_yellow)
 
-'''		
-class Spell:
-	#magic spells
-	def __init__(self, level=0, damage=0, mana_cost=0):
-		self.level = level
-		self.damage = damage
-		self.mana_cost = mana_cost
-		
-	def use(self):
-		if self.mana_cost <= player.fighter.mana:
-			player.fighter.mana -= self.mana_cost
-		else:
-			message('Not enough mana!', libtcod.light_yellow)
-'''
-						
 ###map generation
 				
 class Tile:
@@ -475,7 +471,7 @@ def place_objects(room):
 			if choice == 'orc':
 				fighter_component = Fighter(hp=20, defense=0, power=4, xp=35, death_function=monster_death)
 				ai_component = BasicMonster()
-				monster = Object(x, y, 'o', 'orc', libtcod.desaturated_green, blocks=True, fighter=fighter_component, ai=ai_component)
+				monster = Object(x, y, skeleton_tile, 'orc', libtcod.white, blocks=True, fighter=fighter_component, ai=ai_component)
 			elif choice == 'troll':
 				fighter_component = Fighter(hp=16, defense=1, power=4, xp=100, death_function=monster_death)
 				ai_component=BasicMonster()
@@ -552,9 +548,7 @@ def cast_lightning():
 	if monster is None:
 		message('No enemy in range.', libtcod.red)
 		return 'cancelled'
-		
-	
-		
+
 	message('A lightning bolt strikes the ' + monster.name + ' with a loud thunder! The damage is ' + str(LIGHTNING_DAMAGE) + ' hit points.', libtcod.light_blue)
 	monster.fighter.take_damage(LIGHTNING_DAMAGE)
 	
@@ -683,7 +677,7 @@ def blast():
 		message('You blast the ' + monster.name.capitalize() + ' for ' + str(BLAST_DAMAGE) + ' hit points.', libtcod.light_blue)
 		monster.fighter.take_damage(BLAST_DAMAGE)
 		player.fighter.mana -= BLAST_MANA_COST
-
+		
 ###menus, rendering, key handling, etc
 		
 def menu(header, options, width):
@@ -738,10 +732,7 @@ def inventory_menu(header):
 
 def render_all():
 	global fov_recompute
-	for object in objects:
-		if object != player:
-			object.draw()
-	player.draw()
+
 	
 	for y in range(MAP_HEIGHT):
 		for x in range(MAP_WIDTH):
@@ -750,22 +741,27 @@ def render_all():
 			if not visible:
 				if map[x][y].explored:
 					if wall:
-						libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET)
+						libtcod.console_put_char_ex(con, x, y, wall_tile, libtcod.grey, color_dark_ground)
 					else:
 						libtcod.console_set_char_background(con, x, y, color_dark_ground, libtcod.BKGND_SET)
 			else:
 				if wall:
-					libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET)
+					libtcod.console_put_char_ex(con, x, y, wall_tile, libtcod.white, color_light_ground)
 				else:
 					libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET)
 				map[x][y].explored = True
+				
+	for object in objects:
+		if object != player:
+			object.draw()
+	player.draw()	
 	
 	libtcod.console_blit(con, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
 	
 	if fov_recompute:
 		fov_recompute = False
 		libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO)
-		
+
 	libtcod.console_set_default_foreground(con, libtcod.white)
 	
 	libtcod.console_set_default_background(panel, libtcod.black)
@@ -838,8 +834,7 @@ def handle_keys():
 		elif key.vk == libtcod.KEY_1:
 			if blast() == 'cancelled':
 				return 'didnt-take-turn'
-			return 'didnt-take-turn'
-	
+				
 		#other keys
 		else:
 			key_char = chr(key.c)
@@ -863,7 +858,7 @@ def handle_keys():
 			if key_char == ',':
 				if stairs.x == player.x and stairs.y == player.y:
 					next_level()
-					
+			
 			if key_char == 'c':
 				level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
 				msgbox('Character Information\n\nLevel: ' + str(player.level) + '\nExperienece: ' + str(player.fighter.xp) + 
@@ -913,7 +908,7 @@ def new_game():
 	dungeon_level = 1
 	
 	fighter_component = Fighter(hp=100, defense=1, power=2, xp=0, mana=50, death_function=player_death, magic_level=1)
-	player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
+	player = Object(0, 0, mage_tile, 'player', libtcod.white, blocks=True, fighter=fighter_component)
 
 	player.level = 1
 	
@@ -933,7 +928,7 @@ def new_game():
 	inventory.append(obj)
 	equipment_component.equip()
 	obj.always_visible = True
-	
+
 def initialize_fov():
 	global fov_recompute, fov_map
 	fov_recompute = True
@@ -955,6 +950,7 @@ def play_game():
 	while not libtcod.console_is_window_closed():
 	
 		libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE, key, mouse)
+		player_action = handle_keys()
 		render_all()
 		
 		libtcod.console_flush()
@@ -963,8 +959,6 @@ def play_game():
 	
 		for object in objects:
 			object.clear()
-	
-		player_action = handle_keys()
 		
 		if player_action == 'exit':
 			save_game()
