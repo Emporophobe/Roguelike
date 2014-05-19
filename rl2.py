@@ -75,7 +75,7 @@ color_light_ground = libtcod.Color(150, 150, 150)
 color_dark_ground = libtcod.Color(75, 75, 75)
 
 libtcod.console_set_custom_font('oryx_tiles_edit.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD, 32, 12)
-libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False, libtcod.RENDERER_SDL)
+libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'Title Forthcoming: The Game', False, libtcod.RENDERER_SDL)
 libtcod.console_map_ascii_codes_to_font(256, 32, 0, 5)
 libtcod.console_map_ascii_codes_to_font(256+32, 32, 0, 6)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
@@ -445,7 +445,7 @@ def create_v_tunnel(y1, y2, x):
 		map[x][y].block_sight = False
 	
 def make_map():
-	global map, objects, stairs
+	global map, objects, ladder
 	
 	objects = [player]
 	
@@ -489,10 +489,10 @@ def make_map():
 			rooms.append(new_room)
 			num_rooms +=1
 		
-	#place stairs in center of last room
-	stairs = Object(new_x, new_y, ladder_tile, 'stairs', libtcod.white, always_visible=True)
-	objects.append(stairs)
-	stairs.send_to_back()
+	#place ladder in center of last room
+	ladder = Object(new_x, new_y, ladder_tile, 'ladder', libtcod.white, always_visible=True)
+	objects.append(ladder)
+	ladder.send_to_back()
 
 ###monsters and items
 
@@ -1004,9 +1004,9 @@ def handle_keys():
 				chosen_item = inventory_menu('Press the key next to an item to drop it, or any other to cancel.\n')
 				if chosen_item is not None:
 					chosen_item.drop()
-			#stairs to next level
-			if key_char == ',':
-				if stairs.x == player.x and stairs.y == player.y:
+			#ladder to next level
+			if key.vk == libtcod.KEY_ENTER:
+				if ladder.x == player.x and ladder.y == player.y:
 					next_level()
 			
 			if key_char == 'c':
@@ -1132,7 +1132,7 @@ def check_level_up():
 				['Constitution (+20 HP, from ' + str(player.fighter.max_hp) + ')',
 				'Strength (+1 attack, from ' + str(player.fighter.power) + ')',
 				'Agility (+1 defense, from ' + str(player.fighter.defense) + ')',
-				'Magic (+20 Mana, from ' + str(player.fighter.max_mana) + ' and unlocks spells, current level ' + str(player.fighter.magic_level) + ')'], LEVEL_SCREEN_WIDTH)
+				'Magic (+20 Mana, from ' + str(player.fighter.max_mana)], LEVEL_SCREEN_WIDTH)
 		if choice == 0:
 			player.fighter.base_max_hp += 20
 		elif choice == 1:
@@ -1162,10 +1162,10 @@ def main_menu():
 		libtcod.image_blit_2x(img, 0, 0, 0)
 		
 		libtcod.console_set_default_foreground(0, libtcod.light_yellow)
-		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER, 'NOT TOMBS OF THE ANCIENT KINGS')
-		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-3, libtcod.BKGND_NONE, libtcod.CENTER, 'Not By Jotaf')
+		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER, 'TITLE FORTHCOMING (BETA)')
+		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-3, libtcod.BKGND_NONE, libtcod.CENTER, 'Results may vary')
 		
-		choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 24)
+		choice = menu('', ['Play a new game', 'Continue last game', 'Controls', 'Quit'], 24)
 		
 		if choice == 0:
 			new_game()
@@ -1177,7 +1177,10 @@ def main_menu():
 				msgbox('\n No saved game to load.\n', 24)
 				continue
 			play_game()
-		elif choice == 2:
+		if choice == 2:
+			menu('Controls', ['\n Arrow keys or number pad: move/attack \n 1-9: cast spells \n i: inventory \n g: pick up item \n d: drop items \n Enter: climb ladder \n c: stats'], 50)
+			continue
+		elif choice == 3:
 			break
 
 def save_game():
@@ -1188,12 +1191,12 @@ def save_game():
 	file['inventory'] = inventory
 	file['game_msgs'] = game_msgs
 	file['game_state'] = game_state
-	file['stairs_index'] = objects.index(stairs)
+	file['ladder_index'] = objects.index(ladder)
 	file['dungeon_level'] = dungeon_level
 	file.close()
 
 def load_game():
-	global map, objects, player, inventory, game_msgs, game_state, stairs, dungeon_level
+	global map, objects, player, inventory, game_msgs, game_state, ladder, dungeon_level
 	
 	file = shelve.open('savegame', 'r')
 	map = file['map']
@@ -1202,7 +1205,7 @@ def load_game():
 	inventory = file['inventory']
 	game_msgs = file['game_msgs']
 	game_state = file['game_state']
-	stairs = objects[file['stairs_index']]
+	ladder = objects[file['ladder_index']]
 	dungeon_level = file['dungeon_level']
 	file.close()
 	
