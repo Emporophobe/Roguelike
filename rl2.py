@@ -77,8 +77,25 @@ libtcod.console_map_ascii_codes_to_font(256, 32, 0, 5)
 libtcod.console_map_ascii_codes_to_font(256+32, 32, 0, 6)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 
-mage_tile = 256+32 #2nd row, 1st sprite
-skeleton_tile = 256+32+1 #2nd row, 2nd sprite
+mage_tile = 256+32+0 #2nd row, 1st sprite
+dead_mage_tile = 256+32+1
+skeleton_tile = 256+32+2 #2nd row, 2nd sprite
+dead_skeleton_tile = 256+32+3
+orc_tile = 256+32+4
+dead_orc_tile = 256+32+5
+troll_tile = 256+32+6
+dead_troll_tile = 256+32+7
+
+green_potion_tile = 256+2
+red_potion_tile = 256+3
+blue_potion_tile = 256+4
+
+sword_tile = 256+5
+dagger_tile = 256+6
+scroll_tile = 256+7
+ladder_tile = 256+8
+staff_tile = 256+9
+shield_tile = 256+10
 
 wall_tile = 256
 ground_tile = 256+1
@@ -154,7 +171,7 @@ class Object:
 		libtcod.console_put_char(con, self.x, self.y, ' ', libtcod.BKGND_NONE)
 		
 class Fighter:
-	def __init__(self, hp, defense, power, xp, death_function=None, mana=0, magic_level=0):
+	def __init__(self, hp, defense, power, xp, corpse_icon, death_function=None, mana=0, magic_level=0):
 		self.base_max_hp = hp
 		self.hp = hp
 		self.base_max_mana = mana
@@ -164,6 +181,7 @@ class Fighter:
 		self.base_power = power
 		self.xp = xp
 		self.death_function = death_function
+		self.corpse_icon = corpse_icon
 		
 	def take_damage(self, damage):
 		if damage > 0:
@@ -172,7 +190,7 @@ class Fighter:
 			self.hp = 0
 			function = self.death_function
 			if function is not None:
-				function(self.owner)
+				function(self.owner, self.corpse_icon)
 			
 			if self.owner != player:
 				player.fighter.xp += self.xp
@@ -402,7 +420,7 @@ def make_map():
 			num_rooms +=1
 		
 	#place stairs in center of last room
-	stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
+	stairs = Object(new_x, new_y, ladder_tile, 'stairs', libtcod.white, always_visible=True)
 	objects.append(stairs)
 	stairs.send_to_back()
 
@@ -469,13 +487,13 @@ def place_objects(room):
 			#monster_chances = {'orc': 80, 'troll': 20}
 			choice = random_choice(monster_chances)
 			if choice == 'orc':
-				fighter_component = Fighter(hp=20, defense=0, power=4, xp=35, death_function=monster_death)
+				fighter_component = Fighter(hp=20, defense=0, power=4, xp=35, corpse_icon=dead_orc_tile, death_function=monster_death)
 				ai_component = BasicMonster()
-				monster = Object(x, y, skeleton_tile, 'orc', libtcod.white, blocks=True, fighter=fighter_component, ai=ai_component)
+				monster = Object(x, y, orc_tile, 'orc', libtcod.white, blocks=True, fighter=fighter_component, ai=ai_component)
 			elif choice == 'troll':
-				fighter_component = Fighter(hp=16, defense=1, power=4, xp=100, death_function=monster_death)
+				fighter_component = Fighter(hp=16, defense=1, power=4, xp=100, corpse_icon=dead_troll_tile,  death_function=monster_death)
 				ai_component=BasicMonster()
-				monster = Object(x, y, 'T', 'troll', libtcod.darker_green, blocks=True, fighter=fighter_component, ai=ai_component)
+				monster = Object(x, y, troll_tile, 'troll', libtcod.white, blocks=True, fighter=fighter_component, ai=ai_component)
 		
 		objects.append(monster)
 		
@@ -503,25 +521,25 @@ def place_objects(room):
 			choice = random_choice(item_chances)
 			if choice == 'heal':
 				item_component = Item(use_function=cast_heal)
-				item = Object(x, y, '!', 'healing potion', libtcod.violet, item=item_component)
+				item = Object(x, y, red_potion_tile, 'healing potion', libtcod.white, item=item_component)
 			elif choice =='mana':
 				item_component = Item(use_function=cast_mana)
-				item = Object(x, y, '!', 'mana potion', libtcod.light_blue, item=item_component)
+				item = Object(x, y, blue_potion_tile, 'mana potion', libtcod.white, item=item_component)
 			elif choice == 'confuse':
 				item_component = Item(use_function=cast_confuse)
-				item = Object(x, y, '#', 'confusion scroll', libtcod.light_yellow, item=item_component)
+				item = Object(x, y, scroll_tile, 'confusion scroll', libtcod.white, item=item_component)
 			elif choice == 'lightning':
 				item_component = Item(use_function=cast_lightning)
-				item = Object(x, y, '#', 'lightning scroll', libtcod.light_yellow, item=item_component)
+				item = Object(x, y, scroll_tile, 'lightning scroll', libtcod.white, item=item_component)
 			elif choice == 'fireball':
 				item_component = Item(use_function=cast_fireball)
-				item = Object(x, y, '#', 'fireball scroll', libtcod.light_yellow, item=item_component)
+				item = Object(x, y, scroll_tile, 'fireball scroll', libtcod.white, item=item_component)
 			elif choice == 'sword':
 				equipment_component = Equipment(slot='right hand', power_bonus=3)
-				item = Object(x, y, '/', 'sword', libtcod.sky, equipment=equipment_component)
+				item = Object(x, y, sword_tile, 'sword', libtcod.white, equipment=equipment_component)
 			elif choice == 'shield':
 				equipment_component = Equipment(slot='left hand', defense_bonus=1)
-				item = Object(x, y, '[', 'shield', libtcod.darker_orange, equipment=equipment_component)
+				item = Object(x, y, shield_tile, 'shield', libtcod.white, equipment=equipment_component)
 			
 			item.always_visible = True
 			objects.append(item)
@@ -640,18 +658,16 @@ def player_move_or_attack(dx, dy):
 		player.move(dx, dy)
 		fov_recompute = True
 		
-def player_death(player):
+def player_death(player, icon):
 	global game_state
 	message('You died!', libtcod.red)
 	game_state = 'dead'
 	
-	player.char = '%'
-	player.color = libtcod.dark_red
+	player.char = icon
 	
-def monster_death(monster):
+def monster_death(monster, icon):
 	message(monster.name.capitalize() + ' is dead! You gain ' + str(monster.fighter.xp) + ' experience points.', libtcod.green)
-	monster.char = '%'
-	monster.color = libtcod.dark_red
+	monster.char = icon
 	monster.blocks = False
 	monster.fighter = None
 	monster.ai = None
@@ -907,11 +923,11 @@ def new_game():
 	
 	dungeon_level = 1
 	
-	fighter_component = Fighter(hp=100, defense=1, power=2, xp=0, mana=50, death_function=player_death, magic_level=1)
+	fighter_component = Fighter(hp=100, defense=1, power=2, xp=0, mana=50, corpse_icon=dead_mage_tile, death_function=player_death, magic_level=1)
 	player = Object(0, 0, mage_tile, 'player', libtcod.white, blocks=True, fighter=fighter_component)
 
 	player.level = 1
-	
+
 	make_map()
 	initialize_fov()
 	
@@ -924,7 +940,7 @@ def new_game():
 	
 	#initial equipment
 	equipment_component = Equipment(slot='right hand', power_bonus=2)
-	obj = Object(0, 0, '-', 'dagger', libtcod.sky, equipment=equipment_component)
+	obj = Object(0, 0, dagger_tile, 'dagger', libtcod.white, equipment=equipment_component)
 	inventory.append(obj)
 	equipment_component.equip()
 	obj.always_visible = True
