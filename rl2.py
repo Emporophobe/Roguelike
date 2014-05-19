@@ -41,32 +41,35 @@ TORCH_RADIUS = 10
 #item configuration
 HEAL_AMOUNT = 40
 MANA_HEAL_AMOUNT = 20
+
 LIGHTNING_RANGE = 50
 LIGHTNING_DAMAGE = 40
+
 CONFUSE_NUM_TURNS = 10
 CONFUSE_RANGE = 8
-FIREBALL_RADIUS = 3
-FIREBALL_DAMAGE = 25
+
+HOLY_HAND_GRENADE_RADIUS = 3
+HOLY_HAND_GRENADE_DAMAGE = 25
 
 #spell configuration
-BLAST_DAMAGE = 15
-BLAST_MANA_COST = 10
+BLAST_DAMAGE = 5
+BLAST_MANA_COST = 5
 BLAST_LEVEL = 1
 BLAST_RANGE = 8
 
 BLINK_MANA_COST = 10
 BLINK_LEVEL = 1
-BLINK_RANGE = 8
+BLINK_RANGE = 20
+
+FREEZE_NUM_TURNS = 5
+FREEZE_DAMAGE = 5
+FREEZE_RANGE = 8
+FREEZE_MANA_COST = 10
 
 #level up
 LEVEL_UP_BASE = 200
 LEVEL_UP_FACTOR = 150
 
-
-# color_dark_wall = libtcod.Color(0, 0, 100)
-# color_light_wall = libtcod.Color(130, 110, 50)
-# color_dark_ground = libtcod.Color(50, 50, 150)
-# color_light_ground = libtcod.Color(200, 180, 50)
 
 color_light_ground = libtcod.Color(150, 150, 150)
 color_dark_ground = libtcod.Color(75, 75, 75)
@@ -93,12 +96,20 @@ blue_potion_tile = 256+4
 sword_tile = 256+5
 dagger_tile = 256+6
 scroll_tile = 256+7
-ladder_tile = 256+8
 staff_tile = 256+9
-shield_tile = 256+10
+wand_tile = 256+10
+wood_shield_tile = 256+11
+metal_shield_tile = 256+12
+bow_tile = 256+13
+arrow_tile = 256+14
+holy_hand_grenade_tile = 256+17
+
+ice_tile = 256+15
+fire_tile = 256+16
 
 wall_tile = 256
 ground_tile = 256+1
+ladder_tile = 256+8
 
 libtcod.sys_set_fps(LIMIT_FPS)
 
@@ -147,6 +158,16 @@ class Object:
 		dx = int(round(dx / distance))
 		dy = int(round(dy / distance))
 		
+		self.move(dx, dy)	
+		
+	def move_away(self, target_x, target_y):
+		dx = target_x - self.x
+		dy = target_y - self.y
+		distance = math.sqrt(dx ** 2 + dy ** 2)
+		
+		dx = -1 * int(round(dx / distance))
+		dy = -1 * int(round(dy / distance))
+		
 		self.move(dx, dy)
 	
 	def distance_to(self, other):
@@ -171,7 +192,7 @@ class Object:
 		libtcod.console_put_char(con, self.x, self.y, ' ', libtcod.BKGND_NONE)
 		
 class Fighter:
-	def __init__(self, hp, defense, power, xp, corpse_icon, death_function=None, mana=0, magic_level=0):
+	def __init__(self, hp, defense, power, xp, corpse_icon, death_function=None, mana=0, magic_level=0, ranged_power=0, accuracy=75, range=0):
 		self.base_max_hp = hp
 		self.hp = hp
 		self.base_max_mana = mana
@@ -182,6 +203,9 @@ class Fighter:
 		self.xp = xp
 		self.death_function = death_function
 		self.corpse_icon = corpse_icon
+		self.base_ranged_power = ranged_power
+		self.accuracy = accuracy
+		self.range = range
 		
 	def take_damage(self, damage):
 		if damage > 0:
@@ -218,6 +242,20 @@ class Fighter:
 		else:
 			message(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!.', libtcod.blue)
 			
+	def ranged_attack(self, target):
+		damage = self.ranged_power - target.fighter.defense
+		dice = libtcod.random_get_int(0, 0, 100)
+		
+		if (damage > 0 and dice <= self.accuracy):
+			message(self.owner.name.capitalize() + ' attacks ' + target.name + ' for ' + str(damage) + ' hit points.', libtcod.orange)
+			target.fighter.take_damage(damage)
+		elif dice > self.accuracy:
+			message(self.owner.name.capitalize() + ' attacks and misses!', libtcod.orange)
+		else:
+			message(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!.', libtcod.blue)		
+		
+		
+			
 	#stats and bonuses
 	
 	@property
@@ -238,7 +276,12 @@ class Fighter:
 	@property
 	def max_mana(self):
 		bonus = sum(equipment.max_mana_bonus for equipment in get_all_equipped(self.owner))
-		return self.base_max_mana
+		return self.base_max_mana + bonus
+		
+	@property
+	def ranged_power(self):
+		bonus = sum(equipment.ranged_power_bonus for equipment in get_all_equipped(self.owner))
+		return self.base_ranged_power + bonus
 	
 class BasicMonster:
 	def take_turn(self):
@@ -248,6 +291,17 @@ class BasicMonster:
 				monster.move_towards(player.x, player.y)
 			elif player.fighter.hp > 0:
 				monster.fighter.attack(player)
+
+class RangedMonster:
+	def take_turn(self):
+		monster = self.owner
+		if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+			if monster.distance_to(player) <= 3: #keep distance
+				monster.move_away(player.x, player.y) 
+			elif monster.distance_to(player) < 2 and player.fighter.hp > 0: #melee attack
+				monster.attack(player) 
+			elif player.fighter.hp > 0 and monster.distance_to(player) <= monster.fighter.range: #ranged attack
+				monster.fighter.ranged_attack(player) 
 
 class ConfusedMonster:
 	def __init__(self, old_ai, num_turns=CONFUSE_NUM_TURNS):
@@ -261,6 +315,22 @@ class ConfusedMonster:
 		else:
 			self.owner.ai = self.old_ai
 			message('The ' + self.owner.name + ' is no longer confused!', libtcod.red)
+			
+class FrozenMonster:
+	def __init__(self, old_ai, old_char, num_turns=FREEZE_NUM_TURNS):
+		self.old_ai = old_ai
+		self.num_turns = num_turns
+		self.old_char = old_char
+		
+	def take_turn(self):
+		if self.num_turns > 0:
+			self.owner.char = ice_tile
+			self.owner.move(0, 0)
+			self.num_turns -= 1
+		else:
+			self.owner.ai = self.old_ai
+			self.owner.char = self.old_char
+			message('The ' + self.owner.name + ' is no longer frozen!', libtcod.red)
 			
 class Item:
 	def __init__(self, use_function=None):
@@ -475,6 +545,7 @@ def place_objects(room):
 	#chances of each monster
 	monster_chances = {}
 	monster_chances['orc'] = 80 #orcs will never not have a chance of appearing
+	monster_chances['goblin'] = from_dungeon_level([[10, 1], [30, 3]])
 	monster_chances['troll'] = from_dungeon_level([[1, 1], [2, 4]])
 	
 	#monster generator
@@ -491,9 +562,13 @@ def place_objects(room):
 				ai_component = BasicMonster()
 				monster = Object(x, y, orc_tile, 'orc', libtcod.white, blocks=True, fighter=fighter_component, ai=ai_component)
 			elif choice == 'troll':
-				fighter_component = Fighter(hp=16, defense=1, power=4, xp=100, corpse_icon=dead_troll_tile,  death_function=monster_death)
+				fighter_component = Fighter(hp=30, defense=1, power=5, xp=100, corpse_icon=dead_troll_tile, death_function=monster_death)
 				ai_component=BasicMonster()
 				monster = Object(x, y, troll_tile, 'troll', libtcod.white, blocks=True, fighter=fighter_component, ai=ai_component)
+			elif choice == 'goblin':
+				fighter_component = Fighter(hp=10, defense=0, power=2, ranged_power=4, xp=50, corpse_icon=dead_skeleton_tile, death_function=monster_death, range=8)
+				ai_component=RangedMonster()
+				monster = Object(x, y, skeleton_tile, 'goblin archer', libtcod.white, blocks=True, fighter=fighter_component, ai=ai_component)
 		
 		objects.append(monster)
 		
@@ -505,10 +580,13 @@ def place_objects(room):
 	item_chances['heal'] = 20
 	item_chances['mana'] = 20
 	item_chances['lightning'] = from_dungeon_level([[25, 4]])
-	item_chances['fireball'] = from_dungeon_level([[25, 6]])
-	item_chances['confuse'] = from_dungeon_level([[10, 2]])
-	item_chances['sword'] = from_dungeon_level([[5, 4]])
+	item_chances['grenade'] = from_dungeon_level([[20, 6]])
+	item_chances['confuse'] = from_dungeon_level([[15, 2]])
+	item_chances['sword'] = from_dungeon_level([[10, 6]])
 	item_chances['shield'] = from_dungeon_level([[15, 8]])
+	item_chances['wand'] = from_dungeon_level([[10, 2]])
+	item_chances['staff'] = from_dungeon_level([[10, 6]])
+	
 		
 	#item generator
 	num_items = libtcod.random_get_int(0, 0, max_items)
@@ -517,8 +595,8 @@ def place_objects(room):
 		y = libtcod.random_get_int(0, room.y1+1, room.y2-1)
 		
 		if not is_blocked(x, y):
-			#item_chances = {'heal': 70, 'lightning': 10, 'fireball': 10, 'confuse': 10, 'sword':25, }
 			choice = random_choice(item_chances)
+			
 			if choice == 'heal':
 				item_component = Item(use_function=cast_heal)
 				item = Object(x, y, red_potion_tile, 'healing potion', libtcod.white, item=item_component)
@@ -531,19 +609,27 @@ def place_objects(room):
 			elif choice == 'lightning':
 				item_component = Item(use_function=cast_lightning)
 				item = Object(x, y, scroll_tile, 'lightning scroll', libtcod.white, item=item_component)
-			elif choice == 'fireball':
-				item_component = Item(use_function=cast_fireball)
-				item = Object(x, y, scroll_tile, 'fireball scroll', libtcod.white, item=item_component)
+			elif choice == 'grenade':
+				item_component = Item(use_function=use_holy_hand_grenade)
+				item = Object(x, y, holy_hand_grenade_tile, 'Holy Hand Grenade of Antioch', libtcod.white, item=item_component)
 			elif choice == 'sword':
 				equipment_component = Equipment(slot='right hand', power_bonus=3)
 				item = Object(x, y, sword_tile, 'sword', libtcod.white, equipment=equipment_component)
 			elif choice == 'shield':
 				equipment_component = Equipment(slot='left hand', defense_bonus=1)
-				item = Object(x, y, shield_tile, 'shield', libtcod.white, equipment=equipment_component)
-			
+				item = Object(x, y, wood_shield_tile, 'shield', libtcod.white, equipment=equipment_component)
+			elif choice == 'wand':
+				equipment_component = Equipment(slot='left hand', max_mana_bonus=20)
+				item = Object(x, y, wand_tile, 'wand', libtcod.white, equipment=equipment_component)
+			elif choice == 'staff':
+				equipment_component = Equipment(slot='left hand', max_mana_bonus=40, power_bonus=1)
+				item = Object(x, y, staff_tile, 'staff', libtcod.white, equipment=equipment_component)
+
 			item.always_visible = True
 			objects.append(item)
 			item.send_to_back()
+			
+#item use functions
 			
 def cast_heal():
 	if player.fighter.hp == player.fighter.max_hp:
@@ -580,16 +666,16 @@ def cast_confuse():
 	monster.ai.owner = monster
 	message('The eyes of the ' + monster.name + ' look vacant as he starts to stumble around!', libtcod.light_green)
 	
-def cast_fireball():
-	message('Left-click a target tile for the fireball, or right-click to cancel.', libtcod.light_cyan)
+def use_holy_hand_grenade():
+	message('Left-click a target tile to take out the Holy Pin, or right-click to cancel.', libtcod.light_cyan)
 	(x, y) = target_tile()
 	if x is None: return 'cancelled'
-	message('The fireball explodes, burning everything within ' + str(FIREBALL_RADIUS) + ' tiles!', libtcod.orange)
+	message('One, two, five -- THREE!', libtcod.orange)
 	
 	for obj in objects:
-		if obj.distance(x, y) <= FIREBALL_RADIUS and obj.fighter:
-			message('The ' + obj.name + ' gets burned for ' + str(FIREBALL_DAMAGE) + ' hit points.', libtcod.orange)
-			obj.fighter.take_damage(FIREBALL_DAMAGE)
+		if obj.distance(x, y) <= HOLY_HAND_GRENADE_RADIUS and obj.fighter:
+			message('The ' + obj.name + ' gets blown to tiny bits for ' + str(HOLY_HAND_GRENADE_DAMAGE) + ' hit points.', libtcod.orange)
+			obj.fighter.take_damage(HOLY_HAND_GRENADE_DAMAGE)
 
 def is_blocked(x, y):
 	if map[x][y].blocked:
@@ -678,7 +764,7 @@ def monster_death(monster, icon):
 ###spells
 
 def blast():
-	message('Left-click an enemy to attack it, or right click to cancel.', libtcod.light_cyan)
+	message('Left-click an enemy to blast it, or right click to cancel.', libtcod.light_cyan)
 	monster = target_monster(BLAST_RANGE)
 	
 	if monster is None:
@@ -694,6 +780,45 @@ def blast():
 		monster.fighter.take_damage(BLAST_DAMAGE)
 		player.fighter.mana -= BLAST_MANA_COST
 		
+def freeze():
+	message('Left-click an enemy to freeze it, or right click to cancel.', libtcod.light_cyan)
+	monster = target_monster(BLAST_RANGE)
+	
+	if monster is None:
+		message('No target', libtcod.cyan)
+		return 'cancelled'
+	
+	if player.fighter.mana < BLAST_MANA_COST:
+		message('Not enough mana.', libtcod.red)
+		return 'cancelled'
+		
+	else:
+		message('You freeze the ' + monster.name + '!', libtcod.light_green)
+		old_ai = monster.ai
+		old_char = monster.char
+		
+		monster.ai = FrozenMonster(old_ai, old_char)
+		monster.ai.owner = monster
+		player.fighter.mana -= FREEZE_MANA_COST
+		
+def blink():
+	message('Choose a destination tile.', libtcod.light_violet)
+	target = target_tile(BLINK_RANGE)
+	
+	if target[0] is None:
+		message('No target', libtcod.cyan)
+		return 'cancelled'
+	
+	if player.fighter.mana < BLAST_MANA_COST:
+		message('Not enough mana.', libtcod.red)
+		return 'cancelled'
+		
+	else:
+		player.clear()
+		player.x = target[0]
+		player.y = target[1]
+		player.fighter.mana -= BLINK_MANA_COST
+
 ###menus, rendering, key handling, etc
 		
 def menu(header, options, width):
@@ -850,6 +975,15 @@ def handle_keys():
 		elif key.vk == libtcod.KEY_1:
 			if blast() == 'cancelled':
 				return 'didnt-take-turn'
+				
+		elif key.vk == libtcod.KEY_2:
+			if freeze() == 'cancelled':
+				return 'didnt-take-turn'
+				
+		elif key.vk == libtcod.KEY_3:
+			if blink() == 'cancelled':
+				return 'didnt-take-turn'
+			fov_recompute = True
 				
 		#other keys
 		else:
