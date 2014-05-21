@@ -12,7 +12,8 @@ import shelve
 #screen and menus
 SCREEN_WIDTH = 80
 SCREEN_HEIGHT = 50
-LIMIT_FPS = 20
+
+LIMIT_FPS = 40
 
 MAP_WIDTH = 80
 MAP_HEIGHT = 41
@@ -32,6 +33,12 @@ MSG_HEIGHT = PANEL_HEIGHT - 1
 INVENTORY_WIDTH = 50
 LEVEL_SCREEN_WIDTH = 40
 CHAR_SCREEN_WIDTH = 30
+
+#speeds
+PLAYER_SPEED = 2
+PLAYER_ATTACK_SPEED = 20
+DEFAULT_SPEED = 8
+DEFAULT_ATTACK_SPEED = 20
  
 #fov configuration
 FOV_ALGO = 0
@@ -82,7 +89,7 @@ con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 
 mage_tile = 256+32+0 #2nd row, 1st sprite
 dead_mage_tile = 256+32+1
-skeleton_tile = 256+32+2 #2nd row, 2nd sprite
+skeleton_tile = 256+32+2
 dead_skeleton_tile = 256+32+3
 orc_tile = 256+32+4
 dead_orc_tile = 256+32+5
@@ -118,7 +125,7 @@ panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 ###base classes
 
 class Object:
-	def __init__(self, x, y, char, name, color, blocks=False, always_visible=False, fighter=None, ai=None, item=None, equipment=False):
+	def __init__(self, x, y, char, name, color, blocks=False, always_visible=False, fighter=None, ai=None, item=None, equipment=False, speed=DEFAULT_SPEED):
 		self.x = x
 		self.y = y
 		self.char = char
@@ -126,6 +133,8 @@ class Object:
 		self.name = name
 		self.blocks = blocks
 		self.always_visible = always_visible
+		self.speed = speed
+		self.wait = 0
 				
 		self.fighter = fighter
 		if self.fighter:
@@ -149,6 +158,7 @@ class Object:
 		if not is_blocked(self.x + dx, self.y +dy):
 			self.x += dx
 			self.y += dy
+		self.wait = self.speed
 	
 	def move_towards(self, target_x, target_y):
 		dx = target_x - self.x
@@ -192,7 +202,7 @@ class Object:
 		libtcod.console_put_char(con, self.x, self.y, ' ', libtcod.BKGND_NONE)
 		
 class Fighter:
-	def __init__(self, hp, defense, power, xp, corpse_icon, death_function=None, mana=0, magic_level=0, ranged_power=0, accuracy=75, range=0):
+	def __init__(self, hp, defense, power, xp, corpse_icon, death_function=None, mana=0, magic_level=0, ranged_power=0, accuracy=75, range=0, attack_speed=DEFAULT_ATTACK_SPEED):
 		self.base_max_hp = hp
 		self.hp = hp
 		self.base_max_mana = mana
@@ -206,6 +216,7 @@ class Fighter:
 		self.base_ranged_power = ranged_power
 		self.accuracy = accuracy
 		self.range = range
+		self.attack_speed = attack_speed
 		
 	def take_damage(self, damage):
 		if damage > 0:
@@ -241,6 +252,7 @@ class Fighter:
 			target.fighter.take_damage(damage)
 		else:
 			message(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!.', libtcod.blue)
+		self.owner.wait = self.attack_speed
 			
 	def ranged_attack(self, target):
 		damage = self.ranged_power - target.fighter.defense
@@ -252,7 +264,8 @@ class Fighter:
 		elif dice > self.accuracy:
 			message(self.owner.name.capitalize() + ' attacks and misses!', libtcod.orange)
 		else:
-			message(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!.', libtcod.blue)		
+			message(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!.', libtcod.blue)
+		self.owner.wait = self.attack_speed
 		
 		
 			
@@ -584,8 +597,8 @@ def place_objects(room):
 	item_chances['confuse'] = from_dungeon_level([[15, 2]])
 	item_chances['sword'] = from_dungeon_level([[10, 6]])
 	item_chances['shield'] = from_dungeon_level([[15, 8]])
-	item_chances['wand'] = from_dungeon_level([[10, 2]])
-	item_chances['staff'] = from_dungeon_level([[10, 6]])
+	item_chances['wand'] = from_dungeon_level([[5, 3]])
+	item_chances['staff'] = from_dungeon_level([[5, 6]])
 	
 		
 	#item generator
@@ -782,13 +795,13 @@ def blast():
 		
 def freeze():
 	message('Left-click an enemy to freeze it, or right click to cancel.', libtcod.light_cyan)
-	monster = target_monster(BLAST_RANGE)
+	monster = target_monster(FREEZE_RANGE)
 	
 	if monster is None:
 		message('No target', libtcod.cyan)
 		return 'cancelled'
 	
-	if player.fighter.mana < BLAST_MANA_COST:
+	if player.fighter.mana < FREEZE_MANA_COST:
 		message('Not enough mana.', libtcod.red)
 		return 'cancelled'
 		
@@ -809,7 +822,7 @@ def blink():
 		message('No target', libtcod.cyan)
 		return 'cancelled'
 	
-	if player.fighter.mana < BLAST_MANA_COST:
+	if player.fighter.mana < BLINK_MANA_COST:
 		message('Not enough mana.', libtcod.red)
 		return 'cancelled'
 		
@@ -941,6 +954,11 @@ def handle_keys():
 		return 'exit'
 	
 	if game_state == 'playing':
+		
+		if player.wait > 0:
+			player.wait -= 1
+			return
+		
 		#movement keys
 		if key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8:
 			player_move_or_attack(0, -1)
@@ -1057,8 +1075,8 @@ def new_game():
 	
 	dungeon_level = 1
 	
-	fighter_component = Fighter(hp=100, defense=1, power=2, xp=0, mana=50, corpse_icon=dead_mage_tile, death_function=player_death, magic_level=1)
-	player = Object(0, 0, mage_tile, 'player', libtcod.white, blocks=True, fighter=fighter_component)
+	fighter_component = Fighter(hp=100, defense=1, power=2, xp=0, mana=50, corpse_icon=dead_mage_tile, death_function=player_death, magic_level=1, attack_speed=PLAYER_ATTACK_SPEED)
+	player = Object(0, 0, mage_tile, 'player', libtcod.white, blocks=True, fighter=fighter_component, speed=PLAYER_SPEED)
 
 	player.level = 1
 
@@ -1114,10 +1132,13 @@ def play_game():
 			save_game()
 			break
 			
-		if game_state == 'playing' and player_action != 'didnt-take-turn':
+		if game_state == 'playing': #and player_action != 'didnt-take-turn':
 			for object in objects:
 				if object.ai:
-					object.ai.take_turn()
+					if object.wait > 0:
+						object.wait -= 1
+					else:
+						object.ai.take_turn()
 					
 def check_level_up():
 	level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
@@ -1131,7 +1152,8 @@ def check_level_up():
 			choice = menu('Level up! choose a stat to raise:\n', 
 				['Constitution (+20 HP, from ' + str(player.fighter.max_hp) + ')',
 				'Strength (+1 attack, from ' + str(player.fighter.power) + ')',
-				'Agility (+1 defense, from ' + str(player.fighter.defense) + ')',
+				'Defense (+1 defense, from ' + str(player.fighter.defense) + ')',
+				'Agility (Increased movement and attack speed',
 				'Magic (+20 Mana, from ' + str(player.fighter.max_mana)], LEVEL_SCREEN_WIDTH)
 		if choice == 0:
 			player.fighter.base_max_hp += 20
@@ -1140,6 +1162,13 @@ def check_level_up():
 		elif choice == 2:
 			player.fighter.base_defense += 1
 		elif choice == 3:
+			PLAYER_SPEED -= 2
+			if PLAYER_SPEED < 0:
+				PLAYER_SPEED = 0
+			PLAYER_ATTACK_SPEED -= 2
+			if PLAYER_ATTACK_SPEED < 0:
+				PLAYER_ATTACK_SPEED = 0
+		elif choice == 4:
 			player.fighter.base_max_mana += 20
 			player.fighter.magic_level += 1
 		
@@ -1178,7 +1207,7 @@ def main_menu():
 				continue
 			play_game()
 		if choice == 2:
-			menu('Controls', ['\n Arrow keys or number pad: move/attack \n 1-9: cast spells \n i: inventory \n g: pick up item \n d: drop items \n Enter: climb ladder \n c: stats'], 50)
+			msgbox('\n Arrow keys or number pad: move/attack \n 1-9: cast spells \n i: inventory \n g: pick up item \n d: drop items \n c: stats \n Enter: climb ladder \n Escape: quit to main menu', 50)
 			continue
 		elif choice == 3:
 			break
