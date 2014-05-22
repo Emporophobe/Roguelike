@@ -835,6 +835,7 @@ def blink():
 ###menus, rendering, key handling, etc
 		
 def menu(header, options, width):
+	global key
 	if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options.')
 		
 	header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
@@ -861,12 +862,26 @@ def menu(header, options, width):
 	
 	#wait for keypress before continuing
 	libtcod.console_flush()
-	key = libtcod.console_wait_for_keypress(True)
+	#key = libtcod.console_wait_for_keypress(True)
+		
+	# #convert ASCII code to index and return if it corresponds to an option
+	# index = key.c - ord('a')
+	# if index >= 0 and index < len(options): return index
+	# return None
 	
-	#convert ASCII code to index and return if it corresponds to an option
-	index = key.c - ord('a')
-	if index >= 0 and index < len(options): return index
-	return None
+	while True:
+        #check for input in each iteration
+		#libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE, key, mouse) 
+		key = libtcod.console_check_for_keypress()
+		
+		index = key.c - ord('a')
+		if key.vk == libtcod.KEY_NONE: continue #if nothing is pressed keep looping
+
+		elif index >= 0 and index < len(options): return index #if an option is chosen return it's index in the options list
+
+		elif key.vk == libtcod.KEY_ESCAPE: return None #exit menu if escape key
+			
+		else: continue
 	
 def inventory_menu(header):
 	if len(inventory) == 0:
