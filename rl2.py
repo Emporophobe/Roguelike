@@ -161,15 +161,27 @@ class Object:
 		self.wait = self.speed
 	
 	def move_towards(self, target_x, target_y):
-		dx = target_x - self.x
-		dy = target_y - self.y
-		distance = math.sqrt(dx ** 2 + dy ** 2)
+		global fov_map
+		path = libtcod.path_new_using_map(fov_map)
+		libtcod.path_compute(path, self.x, self.y, target_x, target_y)
+		x,y = libtcod.path_get(path, 0)
+
+		if x is None:
+			self.move(0, 0)
+			
+		else:
+			dx = int(round(target_x - x))
+			dy = int(round(target_y - y))
 		
-		dx = int(round(dx / distance))
-		dy = int(round(dy / distance))
+			if dx != 0:
+				dx = dx/abs(dx)
+			if dy != 0:
+				dy = dy/abs(dy)
+			
+			self.move(dx, dy)
 		
-		self.move(dx, dy)	
-		
+		libtcod.path_delete(path)
+
 	def move_away(self, target_x, target_y):
 		dx = target_x - self.x
 		dy = target_y - self.y
