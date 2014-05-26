@@ -6,7 +6,7 @@ import libtcodpy as libtcod
 import math
 import textwrap
 import shelve
-
+import random
 ###configuration options and initialization
 
 #screen and menus
@@ -259,6 +259,7 @@ class Fighter:
 			
 	def attack(self, target):
 		damage = self.power - target.fighter.defense
+		damage = random_normal_int(damage) #makes damage randomly distributed instead of static
 		if damage > 0:
 			message(self.owner.name.capitalize() + ' attacks ' + target.name + ' for ' + str(damage) + ' hit points.', libtcod.orange)
 			target.fighter.take_damage(damage)
@@ -268,6 +269,7 @@ class Fighter:
 			
 	def ranged_attack(self, target):
 		damage = self.ranged_power - target.fighter.defense
+		damage = random_normal_int(damage)
 		dice = libtcod.random_get_int(0, 0, 100)
 		
 		if (damage > 0 and dice <= self.accuracy):
@@ -539,6 +541,10 @@ def random_choice(chances_dict):
 	
 	return strings[random_choice_index(chances)]
 	
+def random_normal_int(mean, stddev=1):
+	#returns Normally distributed value, +-1 of the mean 68% of the time, +-2 27% of the time
+	return int(round(random.normalvariate(mean, stddev)))
+	
 def from_dungeon_level(table):
 	#returns a value depending on the current dungeon level
 	for (value, level) in reversed(table):
@@ -801,8 +807,9 @@ def blast():
 		return 'cancelled'
 		
 	else:
-		message('You blast the ' + monster.name.capitalize() + ' for ' + str(BLAST_DAMAGE) + ' hit points.', libtcod.light_blue)
-		monster.fighter.take_damage(BLAST_DAMAGE)
+		damage = random_normal_int(BLAST_DAMAGE)
+		message('You blast the ' + monster.name.capitalize() + ' for ' + str(damage) + ' hit points.', libtcod.light_blue)
+		monster.fighter.take_damage(damage)
 		player.fighter.mana -= BLAST_MANA_COST
 		
 def freeze():
@@ -913,7 +920,6 @@ def inventory_menu(header):
 
 def render_all():
 	global fov_recompute
-
 	
 	for y in range(MAP_HEIGHT):
 		for x in range(MAP_WIDTH):
@@ -1168,6 +1174,7 @@ def play_game():
 						object.ai.take_turn()
 					
 def check_level_up():
+	global PLAYER_SPEED, PLAYER_ATTACK_SPEED
 	level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
 	if player.fighter.xp >= level_up_xp:
 		player.level += 1
@@ -1180,7 +1187,7 @@ def check_level_up():
 				['Constitution (+20 HP, from ' + str(player.fighter.max_hp) + ')',
 				'Strength (+1 attack, from ' + str(player.fighter.power) + ')',
 				'Defense (+1 defense, from ' + str(player.fighter.defense) + ')',
-				'Agility (Increased movement and attack speed',
+				'Agility (Increased speed)',
 				'Magic (+20 Mana, from ' + str(player.fighter.max_mana)], LEVEL_SCREEN_WIDTH)
 		if choice == 0:
 			player.fighter.base_max_hp += 20
