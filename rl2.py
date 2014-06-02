@@ -1,12 +1,13 @@
 #http://www.roguebasin.com/index.php?title=Complete_Roguelike_Tutorial,_using_python%2Blibtcod
 
-#notepad++: run with "C:\[path]\debug_py.bat" "$(CURRENT_DIRECTORY)" $(FILE_NAME)
+#notepad++: run with: "C:\[path]\debug_py.bat" "$(CURRENT_DIRECTORY)" $(FILE_NAME)
 
 import libtcodpy as libtcod
 import math
 import textwrap
 import shelve
 import random
+
 ###configuration options and initialization
 
 #screen and menus
@@ -68,10 +69,18 @@ BLINK_MANA_COST = 10
 BLINK_LEVEL = 1
 BLINK_RANGE = 20
 
-FREEZE_NUM_TURNS = 5
+FREEZE_NUM_TURNS = 10
 FREEZE_DAMAGE = 5
 FREEZE_RANGE = 8
 FREEZE_MANA_COST = 10
+
+STUN_NUM_TURNS = 10
+STUN_RANGE = 10
+
+BURN_NUM_TURNS = 10
+BURN_DPT = 1 #damage per turn
+BURN_RANGE = 5
+BURN_MANA_COST = 20
 
 #level up
 LEVEL_UP_BASE = 200
@@ -359,6 +368,52 @@ class FrozenMonster:
 			self.owner.char = self.old_char
 			message('The ' + self.owner.name + ' is no longer frozen!', libtcod.red)
 			
+class StunnedMonster:
+	def __init__(self, old_ai, num_turns=STUN_NUM_TURNS):
+		self.old_ai = old_ai
+		self.num_turns = num_turns
+		
+	def take_turn(self):
+		if self.num_turns > 0:
+			self.owner.move(0, 0)
+			self.num_turns -= 1
+		else:
+			self.owner.ai = self.old_ai
+			self.owner.char = self.old_char
+			message('The ' + self.owner.name + ' is no longer stunned!', libtcod.red)
+			
+class BurningMonster:
+	def __init__ (self, old_ai, old_char, num_turns=BURN_NUM_TURNS, speed=DEFAULT_ATTACK_SPEED):
+			self.old_ai = old_ai
+			self.num_turns = num_turns
+			self.old_char = old_char
+			self.speed = speed
+
+	def take_turn(self):
+		for object in objects:
+			#spread fire to adjacent fighters
+			if object.fighter and object.ai and object not in burningmonsters and object.distance_to(self.owner) < 2: #will burn all monsters that are not already on fire (ie in burningmonsters)
+				old_ai = object.ai
+				old_char = object.char
+				object.ai = BurningMonster(old_ai, old_char)
+				object.ai.owner = object
+				burningmonsters.append(object)
+				
+		if self.speed > 0:
+			self.owner.char = fire_tile
+			self.speed -= 1
+		elif self.num_turns > 0:
+			self.owner.move_towards(player.x, player.y)
+			self.owner.fighter.take_damage(BURN_DPT)
+			self.speed = DEFAULT_ATTACK_SPEED
+			self.num_turns -= 1
+		else:
+			self.owner.ai = self.old_ai
+			self.owner.char = self.old_char
+			message('The ' + self.owner.name + ' is no longer burning!', libtcod.red)
+			
+			burningmonsters.pop(0) #remove monster from list of burning monsters; it can immediately be burned again (remove to keep fire spread down)
+			
 class Item:
 	def __init__(self, use_function=None):
 		self.use_function = use_function
@@ -542,7 +597,7 @@ def random_choice(chances_dict):
 	return strings[random_choice_index(chances)]
 	
 def random_normal_int(mean, stddev=1):
-	#returns Normally distributed value, +-1 of the mean 68% of the time, +-2 27% of the time
+	#returns Normally distributed value, if stddev == 1, +-1 of the mean 68% of the time, +-2 27% of the time
 	return int(round(random.normalvariate(mean, stddev)))
 	
 def from_dungeon_level(table):
@@ -850,6 +905,29 @@ def blink():
 		player.x = target[0]
 		player.y = target[1]
 		player.fighter.mana -= BLINK_MANA_COST
+		
+def burn():
+	message('Left-click an enemy to burn it, or right click to cancel.', libtcod.light_cyan)
+	monster = target_monster(BURN_RANGE)
+	
+	if monster is None:
+		message('No target', libtcod.cyan)
+		return 'cancelled'
+	
+	if player.fighter.mana < BURN_MANA_COST:
+		message('Not enough mana.', libtcod.red)
+		return 'cancelled'
+		
+	else:
+		message('You burn the ' + monster.name + '!', libtcod.light_green)
+		old_ai = monster.ai
+		old_char = monster.char
+		
+		monster.ai = BurningMonster(old_ai, old_char)
+		burningmonsters.append(monster)
+		monster.ai.owner = monster
+		player.fighter.mana -= BURN_MANA_COST
+			
 
 ###menus, rendering, key handling, etc
 		
@@ -1035,6 +1113,11 @@ def handle_keys():
 			if blink() == 'cancelled':
 				return 'didnt-take-turn'
 			fov_recompute = True
+			
+		elif key.vk == libtcod.KEY_4:
+			if burn() == 'cancelled':
+				return 'didnt-take-turn'
+			fov_recompute = True
 				
 		#other keys
 		else:
@@ -1104,7 +1187,7 @@ def msgbox(text, width=50):
 ###game loops
 
 def new_game():
-	global player, inventory, game_msgs, game_state, dungeon_level
+	global player, inventory, game_msgs, game_state, dungeon_level, burningmonsters
 	
 	dungeon_level = 1
 	
@@ -1118,6 +1201,7 @@ def new_game():
 	
 	game_state = 'playing'
 	inventory = []
+	burningmonsters = []
 	
 	game_msgs = []
 	
@@ -1172,7 +1256,7 @@ def play_game():
 						object.wait -= 1
 					else:
 						object.ai.take_turn()
-					
+				
 def check_level_up():
 	global PLAYER_SPEED, PLAYER_ATTACK_SPEED
 	level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
