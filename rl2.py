@@ -96,6 +96,9 @@ libtcod.console_map_ascii_codes_to_font(256, 32, 0, 5)
 libtcod.console_map_ascii_codes_to_font(256+32, 32, 0, 6)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 
+mouse = libtcod.Mouse()
+key = libtcod.Key()
+
 mage_tile = 256+32+0 #2nd row, 1st sprite
 dead_mage_tile = 256+32+1
 skeleton_tile = 256+32+2
@@ -932,53 +935,53 @@ def burn():
 ###menus, rendering, key handling, etc
 		
 def menu(header, options, width):
-	global key
-	if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options.')
-		
-	header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
-	if header == '':
-		header_height = 0
-	height = len(options) + header_height
-	
-	window = libtcod.console_new(width, height)
-	
-	libtcod.console_set_default_foreground(window, libtcod.white)
-	libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
-	
-	y = header_height
-	letter_index = ord('a')
-	for options_text in options:
-		text = '(' + chr(letter_index) + ') ' + options_text
-		libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
-		y += 1
-		letter_index += 1
-		
-	x = SCREEN_WIDTH/2 - width/2
-	y = SCREEN_HEIGHT/2 - height/2
-	libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
-	
-	#wait for keypress before continuing
-	libtcod.console_flush()
-	#key = libtcod.console_wait_for_keypress(True)
-		
-	# #convert ASCII code to index and return if it corresponds to an option
-	# index = key.c - ord('a')
-	# if index >= 0 and index < len(options): return index
-	# return None
-	
-	while True:
+    global key
+    
+    if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options.')
+
+    #calculate total height for header (after auto-wrap) and one line per option
+    header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+    if header == '':
+        header_height = 0
+    height = len(options) + header_height
+
+    #calculate an off-screen console that represents the menu's window
+    window = libtcod.console_new(width, height)
+
+    #print the header, with auto-wrap
+    libtcod.console_set_default_foreground(window, libtcod.white)
+    libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
+
+    #print all the options
+    y = header_height
+    letter_index = ord('a')
+    for option_text in options:
+        text = '[' + chr(letter_index) + '] ' + option_text.capitalize()
+        libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
+        y += 1
+        letter_index += 1
+
+    #blit the contents of window to root console
+    x = SCREEN_WIDTH / 2 - width / 2
+    y = SCREEN_HEIGHT / 2 - height / 2
+    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
+
+    libtcod.console_flush()
+
+    while True:
         #check for input in each iteration
-		#libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE, key, mouse) 
-		key = libtcod.console_check_for_keypress()
-		
-		index = key.c - ord('a')
-		if key.vk == libtcod.KEY_NONE: continue #if nothing is pressed keep looping
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE, key, mouse) 
 
-		elif index >= 0 and index < len(options): return index #if an option is chosen return it's index in the options list
+        index = key.c - ord('a')
+        if key.vk == libtcod.KEY_NONE: continue #if nothing is pressed keep looping
 
-		elif key.vk == libtcod.KEY_ESCAPE: return None #exit menu if escape key
-			
-		else: continue
+        elif key.vk == libtcod.KEY_ENTER and key.lalt:
+            #Alt+Enter: toggle fullscreen
+            libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
+
+        elif index >= 0 and index < len(options): return index #if an option is chosen return it's index in the options list
+
+        elif index < 0 or index >= len(options): return None #if any other key is pressed close the menu
 	
 def inventory_menu(header):
 	if len(inventory) == 0:
@@ -1340,10 +1343,11 @@ def save_game():
 	file['game_state'] = game_state
 	file['ladder_index'] = objects.index(ladder)
 	file['dungeon_level'] = dungeon_level
+	file['burningmonsters'] = burningmonsters
 	file.close()
 
 def load_game():
-	global map, objects, player, inventory, game_msgs, game_state, ladder, dungeon_level
+	global map, objects, player, inventory, game_msgs, game_state, ladder, dungeon_level, burningmonsters
 	
 	file = shelve.open('savegame', 'r')
 	map = file['map']
@@ -1354,6 +1358,7 @@ def load_game():
 	game_state = file['game_state']
 	ladder = objects[file['ladder_index']]
 	dungeon_level = file['dungeon_level']
+	burningmonsters = file['burningmonsters']
 	file.close()
 	
 	initialize_fov()
